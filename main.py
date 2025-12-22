@@ -9,30 +9,8 @@ import math
 import os
 from dotenv import load_dotenv
 
-import threading
-model_lock = threading.Lock()
-_model_instance = None
 
 load_dotenv()
-
-def get_model():
-    global _model_instance
-    if _model_instance is None:
-        with model_lock:
-            if _model_instance is None:
-                try:
-                    _model_instance = YOLO("best.pt")
-                    print("✅ Model loaded successfully")
-                except Exception as e:
-                    print(f"❌ Error loading model: {e}")
-                    _model_instance = None
-    return _model_instance
-
-@app.post("/detect")
-async def detect(file: UploadFile = File(...)):
-    model = get_model()  # 惰性加载
-    if model is None:
-        return {"error": "Model not loaded"}
 
 app = FastAPI(title="Microplastics AI API")
 

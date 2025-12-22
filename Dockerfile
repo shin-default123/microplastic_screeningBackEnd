@@ -1,23 +1,25 @@
 # Dockerfile
-FROM python:3.10-slim-bookworm  
+FROM python:3.10-slim-bullseye
 
-# 安装仅最小系统依赖
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+# Minimal system dependencies - only essentials for OpenCV and PyTorch
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 复制并安装 Python 依赖
+# Copy requirements first (for better caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
 
-# 复制应用代码
+# Install with optimization flags
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --compile -r requirements.txt
+
+# Copy only essential files
 COPY main.py .
 COPY best.pt .
-COPY .env .  
+COPY .env .
 
 EXPOSE 8000
 

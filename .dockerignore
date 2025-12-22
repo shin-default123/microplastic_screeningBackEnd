@@ -2,11 +2,17 @@ __pycache__/
 *.pyc
 .git/
 .vscode/
-dataset/
-test_images/
 *.log
 *.csv
 *.ipynb
-*.md
-.gitignore
-README.md
+*.jpg
+*.png
+*.jpeg
+*.DS_Store
+.env.local
+test*
+data/
+dataset/
+models/  # except best.pt
+docs/
+examples/
