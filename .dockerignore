@@ -1,8 +1,12 @@
 __pycache__/
 *.pyc
 .git/
-.env
 .vscode/
-dataset/  # If you have local training data
+dataset/
 test_images/
 *.log
+*.csv
+*.ipynb
+*.md
+.gitignore
+README.md
