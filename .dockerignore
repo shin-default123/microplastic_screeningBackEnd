@@ -9,10 +9,11 @@ __pycache__/
 *.png
 *.jpeg
 *.DS_Store
+.env  # Add this line - ignore .env files
 .env.local
 test*
 data/
 dataset/
-models/  # except best.pt
+models/
 docs/
 examples/

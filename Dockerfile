@@ -1,7 +1,7 @@
-# Dockerfile
+# Dockerfile - Corrected version
 FROM python:3.10-slim-bullseye
 
-# Minimal system dependencies - only essentials for OpenCV and PyTorch
+# Minimal system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -9,17 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy requirements first (for better caching)
+# Copy requirements first
 COPY requirements.txt .
 
-# Install with optimization flags
+# Install packages
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir --compile -r requirements.txt
 
-# Copy only essential files
+# Copy only essential files (NO .env)
 COPY main.py .
 COPY best.pt .
-COPY .env .
 
 EXPOSE 8000
 

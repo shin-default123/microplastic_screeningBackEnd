@@ -1,4 +1,4 @@
-# main.py - Updated for Railway
+# main.py - Updated version
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
@@ -7,17 +7,12 @@ import numpy as np
 import io
 import math
 import os
-from dotenv import load_dotenv
-
-
-load_dotenv()
 
 app = FastAPI(title="Microplastics AI API")
 
-# Allow all origins for production (adjust as needed)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Vercel frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,7 +26,8 @@ except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
 
-MICRONS_PER_PIXEL = float(os.getenv("MICRONS_PER_PIXEL", "5.0"))
+# Set MICRONS_PER_PIXEL directly (no .env needed)
+MICRONS_PER_PIXEL = 5.0  # Default value, adjust as needed
 
 SIZE_CATEGORIES = {
     'nanoplastic': (0, 1),
