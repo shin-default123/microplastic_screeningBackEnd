@@ -29,4 +29,5 @@ test*
 *.png
 *.mp4
 *.avi
-railway.json  # Don't copy railway.json to Docker
+README.md
+railway.json  # Don't copy this to Docker
