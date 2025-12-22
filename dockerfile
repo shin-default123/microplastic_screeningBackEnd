@@ -1,4 +1,4 @@
-# Use specific Python 3.10 version
+# Use Python 3.10 slim image
 FROM python:3.10.13-slim-bullseye
 
 WORKDIR /app
@@ -10,35 +10,26 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxext6 \
     libxrender-dev \
-    gcc \
-    g++ \
-    pkg-config \
+    wget \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Upgrade pip and install build tools
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
 
-# Install Python dependencies - Use CPU versions for smaller size
-RUN pip install --no-cache-dir \
-    torch==2.1.0+cpu torchvision==0.16.0+cpu \
-    --index-url https://download.pytorch.org/whl/cpu
+# Copy requirements first for better caching
+COPY requirements.txt .
 
-RUN pip install --no-cache-dir \
-    numpy==1.24.3 \
-    pillow==9.5.0 \  # CHANGED FROM 10.1.0 to 9.5.0
-    opencv-python-headless==4.8.1.78 \
-    fastapi==0.104.1 \
-    uvicorn[standard]==0.24.0 \
-    python-multipart==0.0.6 \
-    python-dotenv==1.0.0
-
-# Install ultralytics (dependencies already installed)
-RUN pip install --no-cache-dir ultralytics==8.0.196
+# Install dependencies from requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
 EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=2)"
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
