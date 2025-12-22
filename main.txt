@@ -1,0 +1,140 @@
+ 
+ from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from ultralytics import YOLO
+from PIL import Image
+import numpy as np
+import io
+import math
+
+app = FastAPI(title="Microplastics AI API")
+
+# Allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Load YOLO model ONCE
+model = YOLO("app/ai/best.pt")
+
+# Size classification parameters (IN MICRONS)
+# You MUST CALIBRATE this for your setup!
+# Example: if 1mm (1000µm) = 200 pixels, then MICRONS_PER_PIXEL = 5.0
+MICRONS_PER_PIXEL = 5.0  # CHANGE THIS TO YOUR CALIBRATION!
+
+SIZE_CATEGORIES = {
+    'nanoplastic': (0, 1),           # < 1 µm
+    'small': (1, 100),               # 1 – 100 µm
+    'medium': (100, 1000),           # 100 – 1000 µm (0.1 – 1 mm)
+    'large': (1000, 5000),           # 1 – 5 mm
+}
+
+def classify_microplastic_size(width_µm, height_µm):
+    """Classify microplastic based on diagonal size"""
+    diagonal_µm = math.sqrt(width_µm**2 + height_µm**2)
+    
+    for category, (min_size, max_size) in SIZE_CATEGORIES.items():
+        if min_size <= diagonal_µm < max_size:
+            return category, diagonal_µm
+    
+    # If larger than 5mm, still classify as large
+    if diagonal_µm >= 5000:
+        return 'large', diagonal_µm
+    
+    return 'unknown', diagonal_µm
+
+@app.get("/")
+def root():
+    return {"status": "backend running"}
+
+@app.post("/detect")
+async def detect(file: UploadFile = File(...)):
+    image_bytes = await file.read()
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img_array = np.array(image)
+
+    # Get image dimensions for normalization
+    img_height, img_width = img_array.shape[:2]
+
+    results = model(img_array, conf=0.4)
+
+    detections = []
+    for r in results:
+        for box in r.boxes:
+            # Get coordinates in [x1, y1, x2, y2] format
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            
+            # Convert to [x, y, width, height] format
+            x = x1
+            y = y1
+            width = x2 - x1
+            height = y2 - y1
+            
+            # OPTION 1: Return absolute pixel values
+            bbox = [float(x), float(y), float(width), float(height)]
+            
+            # Calculate size in microns
+            width_µm = width * MICRONS_PER_PIXEL
+            height_µm = height * MICRONS_PER_PIXEL
+            
+            cls_id = int(box.cls[0])
+            label = model.names[cls_id] if hasattr(model, 'names') else "microplastic"
+            
+            # Initialize size category
+            size_category = None
+            diagonal_µm = None
+            
+            # Only classify size for microplastics
+            if label.lower() == "microplastic":
+                size_category, diagonal_µm = classify_microplastic_size(width_µm, height_µm)
+            
+            detection_data = {
+                "label": label,
+                "confidence": float(box.conf[0]),
+                "bbox": bbox,  # [x, y, width, height] in pixels
+                "width_px": float(width),
+                "height_px": float(height),
+            }
+            
+            # Add size info if it's a microplastic
+            if label.lower() == "microplastic":
+                detection_data.update({
+                    "size_category": size_category,
+                    "width_µm": round(float(width_µm), 2),
+                    "height_µm": round(float(height_µm), 2),
+                    "diagonal_µm": round(float(diagonal_µm), 2) if diagonal_µm else None,
+                })
+            
+            detections.append(detection_data)
+
+    # Count microplastics by size category
+    size_counts = {
+        'nanoplastic': 0,
+        'small': 0,
+        'medium': 0,
+        'large': 0,
+    }
+    
+    for detection in detections:
+        if detection['label'].lower() == 'microplastic' and 'size_category' in detection:
+            size_category = detection['size_category']
+            if size_category in size_counts:
+                size_counts[size_category] += 1
+    
+    return {
+        "count": len(detections),
+        "detections": detections,
+        "image_size": [img_width, img_height],
+        "size_counts": size_counts,
+        "calibration_info": {
+            "microns_per_pixel": MICRONS_PER_PIXEL,
+            "field_of_view_µm": [
+                round(img_width * MICRONS_PER_PIXEL, 2),
+                round(img_height * MICRONS_PER_PIXEL, 2)
+            ]
+        },
+        "disclaimer": "Screening tool only. Not a lab analysis."
+    } 

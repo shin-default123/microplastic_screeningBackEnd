@@ -1,14 +1,20 @@
-__pycache__/
+# .railwayignore
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
 .venv/
-.idea/
+venv/
+.git/
 .vscode/
+.idea/
+*.log
+*.tmp
+*.bak
 *.swp
 *.swo
-*~
 .DS_Store
+Thumbs.db
