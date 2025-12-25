@@ -1,4 +1,3 @@
-# main.py - Updated version
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
@@ -45,6 +44,16 @@ def classify_microplastic_size(width_µm, height_µm):
     
     return 'large', diagonal_µm
 
+def get_size_implication(size_category, count):
+    """Provide implications based on size categories"""
+    implications = {
+        'nanoplastic': "Highest environmental risk - can penetrate cells and accumulate in organisms",
+        'small': "Significant risk - can be ingested by small organisms and enter food chains",
+        'medium': "Moderate risk - can be ingested by larger organisms and cause physical harm",
+        'large': "Lower immediate risk but contributes to macroplastic degradation over time"
+    }
+    return implications.get(size_category, "Unknown risk level")
+
 @app.get("/")
 def root():
     return {"status": "Microplastics AI Backend Running", "model_loaded": model is not None}
@@ -66,6 +75,8 @@ async def detect(file: UploadFile = File(...)):
     results = model(img_array, conf=0.4)
 
     detections = []
+    microplastic_detections = []
+    
     for r in results:
         for box in r.boxes:
             x1, y1, x2, y2 = box.xyxy[0].tolist()
@@ -86,6 +97,15 @@ async def detect(file: UploadFile = File(...)):
             
             if label.lower() == "microplastic":
                 size_category, diagonal_µm = classify_microplastic_size(width_µm, height_µm)
+                
+                # Add to microplastic-specific list for statistics
+                microplastic_detections.append({
+                    "width_µm": width_µm,
+                    "height_µm": height_µm,
+                    "diagonal_µm": diagonal_µm,
+                    "area_µm2": width_µm * height_µm,
+                    "size_category": size_category
+                })
             
             detection_data = {
                 "label": label,
@@ -113,6 +133,49 @@ async def detect(file: UploadFile = File(...)):
             if size_category in size_counts:
                 size_counts[size_category] += 1
     
+    # Calculate additional statistics
+    additional_stats = {}
+    if microplastic_detections:
+        diagonals = [d["diagonal_µm"] for d in microplastic_detections]
+        areas = [d["area_µm2"] for d in microplastic_detections]
+        
+        # Basic statistics
+        additional_stats = {
+            "average_size_µm": round(np.mean(diagonals), 2),
+            "median_size_µm": round(np.median(diagonals), 2),
+            "min_size_µm": round(np.min(diagonals), 2),
+            "max_size_µm": round(np.max(diagonals), 2),
+            "std_size_µm": round(np.std(diagonals), 2) if len(diagonals) > 1 else 0,
+            "total_area_µm2": round(sum(areas), 2),
+            "average_area_µm2": round(np.mean(areas), 2),
+            "median_area_µm2": round(np.median(areas), 2)
+        }
+        
+        # Size category specific statistics
+        size_category_stats = {}
+        for category in SIZE_CATEGORIES.keys():
+            category_diagonals = [d["diagonal_µm"] for d in microplastic_detections if d["size_category"] == category]
+            if category_diagonals:
+                size_category_stats[category] = {
+                    "count": len(category_diagonals),
+                    "average_size_µm": round(np.mean(category_diagonals), 2),
+                    "min_size_µm": round(np.min(category_diagonals), 2),
+                    "max_size_µm": round(np.max(category_diagonals), 2),
+                    "implication": get_size_implication(category, len(category_diagonals))
+                }
+        
+        additional_stats["size_category_statistics"] = size_category_stats
+        
+        # Overall implications
+        total_microplastics = len(microplastic_detections)
+        if total_microplastics > 0:
+            additional_stats["implications"] = {
+                "total_particles": f"Sample contains {total_microplastics} microplastic particles",
+                "risk_assessment": "High risk sample" if size_counts.get('nanoplastic', 0) > 0 or size_counts.get('small', 0) > 5 else "Moderate risk sample",
+                "area_coverage": f"Total area coverage: {additional_stats['total_area_µm2'] / 1e6:.4f} mm²",
+                "concentration": f"Particle concentration: {total_microplastics / ((img_width * MICRONS_PER_PIXEL) * (img_height * MICRONS_PER_PIXEL) / 1e6):.2f} particles/mm²"
+            }
+    
     return {
         "count": len(detections),
         "detections": detections,
@@ -124,7 +187,8 @@ async def detect(file: UploadFile = File(...)):
                 round(img_width * MICRONS_PER_PIXEL, 2),
                 round(img_height * MICRONS_PER_PIXEL, 2)
             ]
-        }
+        },
+        "statistics": additional_stats if additional_stats else None
     }
 
 if __name__ == "__main__":
